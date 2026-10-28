@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drill 5</title>
+</head>
+<body>
+    <main>
+        <h1>Forms</h1>
+        <section>
+            <h2>Form 1</h2>
+            <form name="book-visit" action="book.php" method="get">
+                <div>
+                    <label for="member-no">Member No.</label>
+                    <input  type="text" name="member-no" id="member-no" required>
+                </div>
+                <div>
+                    <label for="full-name">Full Name*</label>
+                    <input  type="text" name="full-name" id="full-name" required>
+                </div>
+                <div>
+                    <label for="phone-no">Phone Number*</label>
+                    <input  type="number" name="phone-no" id="phone-no" required>
+                </div>
+                <div>
+                    <label for="email">Email</label>
+                    <input  type="email" name="email" id="email" required>
+                </div>
+                <div>
+                    <label for="route">Route</label>
+                    <select name="route" id="route">
+                        <option value="">-- Choose your route</option>
+                        <option value="kiserian">Kiserian</option>
+                        <option value="ngong">Ngong</option>
+                        <option value="isinya">Isinya</option>
+                    </select>
+                </div>
+                <div>
+                    <input type="submit" value="Submit">
+                    <input type="reset" value="Reset">
+                </div>
+            </form>
+        </section>
+    </main>
+</body>
+</html>
