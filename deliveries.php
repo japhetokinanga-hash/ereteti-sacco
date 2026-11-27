@@ -1,66 +1,76 @@
 <?php
-require_once 'includes/db.php';            // 1 · CONNECT
+require_once 'includes/db.php';
 
-// 2 · QUERY — every delivery on one day, with the farmer's number and name
-$sql = "SELECT f.member_no, f.first_name, f.last_name, d.session, d.litres, d.accepted
+$page_title = 'Deliveries';
+
+// The visitor chooses the day in the address, e.g. deliveries.php?date=2026-10-31
+$date = $_GET['date'] ?? '2026-10-12';
+
+// Prepared query: anything the visitor typed goes in as a value, never as SQL
+$stmt = mysqli_prepare($conn, "SELECT d.delivery_id, f.member_no, f.first_name, f.last_name, d.session, d.litres, d.accepted
         FROM milk_delivery d
         JOIN farmer f ON f.farmer_id = d.farmer_id
-        WHERE d.delivery_date = '2026-10-12'
-        ORDER BY f.member_no, d.session";
-$result = mysqli_query($conn, $sql);
-
-// Step 5 — count the rows
+        WHERE d.delivery_date = ?
+        ORDER BY f.member_no, d.session");
+mysqli_stmt_bind_param($stmt, 's', $date);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
 $count = mysqli_num_rows($result);
+
+// Accepted total for this day, worked out on the server
+$total = 0;
+$rows = [];
+while ($row = mysqli_fetch_assoc($result)) {
+    $rows[] = $row;
+    if ($row['accepted'] == 1) {
+        $total = $total + (float) $row['litres'];
+    }
+}
+
+include 'includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Deliveries — Ereteti Dairy Sacco</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&amp;family=Source+Serif+4:wght@600&amp;display=swap">
-  <link rel="stylesheet" href="css/style.css">
-  <!-- Week 8: the script, with defer -->
-  <script src="js/main.js" defer></script>
-
-<script>
-    console.log ("Embedded JS");
-</script>
-</head>
-<body>
-
-  <header>
-    <h1>Deliveries</h1>
-    <p>Milk collected twice a day, on three routes out of Ngong.</p>
-  </header>
-
-  <nav>
-    <ul>
-      <li><a href="index.html">Home</a></li>
-      <li><a href="about.html">About</a></li>
-      <li><a href="routes.html">Routes</a></li>
-      <li><a href="contact.html">Contact</a></li>
-      <li><a href="register.html">Join</a></li>
-      <li><a href="deliveries.html">Deliveries</a></li>
-    </ul>
-  </nav>
 
   <main>
     <p><?php echo $count; ?> deliveries on this day.</p>
 
-    <p>Milk received on Monday 12 October 2026, from all three routes —
+    <p>Milk received on <?php echo htmlspecialchars(date('l j F Y', strtotime($date))); ?>, from all three routes —
     Kiserian, Ngong and Rongai. Both sessions are listed: the morning
     collection from 6.30am and the evening collection from 4.00pm.</p>
 
-    <!-- Week 8: the clerk's form -->
+<?php
+if (isset($_GET['saved'])) {
+    echo '<p>The delivery was recorded.</p>';
+}
+if (isset($_GET['updated'])) {
+    echo '<p>The delivery was changed.</p>';
+}
+if (isset($_GET['deleted'])) {
+    echo '<p>The delivery was deleted.</p>';
+}
+if (isset($_GET['error'])) {
+    echo '<p>' . htmlspecialchars($_GET['error']) . '</p>';
+}
+?>
+
+    <h2>Choose a day</h2>
+    <form action="deliveries.php" method="get">
+      <label for="date">Date</label>
+      <input type="date" id="date" name="date" value="<?php echo htmlspecialchars($date); ?>" required>
+      <button type="submit">Show</button>
+    </form>
+
     <h2>Record a delivery</h2>
 
-    <form id="delivery-form" action="#" method="post">
+    <form id="delivery-form" action="process-delivery.php" method="post">
       <label for="member">Member number</label>
       <input type="text" id="member" name="member_no"
              placeholder="ER-0000" required>
       <p id="member-message" class="message"
          aria-live="polite"></p>
+
+      <label for="delivery-date">Date</label>
+      <input type="date" id="delivery-date" name="delivery_date"
+             value="<?php echo htmlspecialchars($date); ?>" required>
 
       <label for="session">Session</label>
       <select id="session" name="session" required>
@@ -71,9 +81,14 @@ $count = mysqli_num_rows($result);
 
       <label for="litres">Litres</label>
       <input type="number" id="litres" name="litres"
-             step="0.01" required>
+             min="0.01" step="0.01" required>
       <p id="litres-message" class="message"
          aria-live="polite"></p>
+
+      <label for="accepted">
+        <input type="checkbox" id="accepted" name="accepted" value="1" checked>
+        Accepted
+      </label>
 
       <button type="submit">Record delivery</button>
       <p id="form-message" aria-live="polite"></p>
@@ -81,37 +96,44 @@ $count = mysqli_num_rows($result);
 
     <div class="table-scroll">
       <table>
-        <caption>Milk received, Monday 12 October 2026</caption>
+        <caption>Milk received, <?php echo htmlspecialchars(date('l j F Y', strtotime($date))); ?></caption>
 
         <thead>
           <tr>
             <th scope="col">Member</th>
-            <th scope="col">Farmer</th>
+            <th scope="col">Name</th>
             <th scope="col">Session</th>
             <th scope="col">Litres</th>
             <th scope="col">Accepted</th>
+            <th scope="col"></th>
           </tr>
         </thead>
 
         <tbody>
 <?php
 if ($count === 0) {
-    echo '<tr><td colspan="5">No deliveries recorded on this day.</td></tr>';
+    echo '<tr><td colspan="6">No deliveries recorded on this day.</td></tr>';
 } else {
-    // 3 · FETCH each row, and 4 · SHOW it as a table row
-    while ($row = mysqli_fetch_assoc($result)) {
-        // the database stores 1 or 0; the page says Yes or No
+    foreach ($rows as $row) {
         if ($row['accepted'] == 1) {
             $accepted = 'Yes';
         } else {
             $accepted = 'No';
         }
         echo '<tr>';
-        echo '<td>' . $row['member_no'] . '</td>';
-        echo '<td>' . $row['first_name'] . ' ' . $row['last_name'] . '</td>';
-        echo '<td>' . ucfirst(strtolower($row['session'])) . '</td>';
-        echo '<td>' . $row['litres'] . '</td>';
+        echo '<td>' . htmlspecialchars($row['member_no']) . '</td>';
+        echo '<td>' . htmlspecialchars($row['first_name']) . ' ' . htmlspecialchars($row['last_name']) . '</td>';
+        echo '<td>' . htmlspecialchars(ucfirst(strtolower($row['session']))) . '</td>';
+        echo '<td>' . htmlspecialchars($row['litres']) . '</td>';
         echo '<td>' . $accepted . '</td>';
+        echo '<td>';
+        echo '<a href="edit-delivery.php?id=' . (int) $row['delivery_id'] . '">Edit</a>';
+        echo ' <form action="delete-delivery.php" method="post" onsubmit="return confirm(\'Delete this delivery?\');">';
+        echo '<input type="hidden" name="delivery_id" value="' . (int) $row['delivery_id'] . '">';
+        echo '<input type="hidden" name="delivery_date" value="' . htmlspecialchars($date) . '">';
+        echo '<button type="submit">Delete</button>';
+        echo '</form>';
+        echo '</td>';
         echo '</tr>';
     }
 }
@@ -121,34 +143,19 @@ if ($count === 0) {
         <tfoot>
           <tr>
             <th colspan="4" scope="row">Accepted today</th>
-            <td id="accepted-total"></td>
+            <td id="accepted-total"><?php echo number_format($total, 2); ?></td>
+            <td></td>
           </tr>
         </tfoot>
       </table>
     </div>
 
+<?php if ($date === '2026-10-12') { ?>
     <p>Joseph Kamau's morning load failed the alcohol test and was
     rejected, so it is not counted in the day's total. It is still
     listed: a rejected load is recorded, never deleted, because the
     farmer has a right to see what happened to their milk.</p>
+<?php } ?>
   </main>
 
-  <aside>
-    <h2>Notices</h2>
-    <ul>
-      <li>Milk is paid at <strong>KSh 52.00 a litre</strong> from
-          1 October 2026.</li>
-      <li>Annual General Meeting: Saturday 17 October, 10 a.m., at the
-          Kiserian collection centre.</li>
-      <li>New members: <a href="register.html">apply to join</a>. You need
-          a national ID and a bank account.</li>
-    </ul>
-  </aside>
-
-  <footer>
-    <p>Ereteti Dairy Sacco, PO Box 4021, Ngong.</p>
-    <p>Site built by Japhet Kinanga, DBT Year 1, 2026.</p>
-  </footer>
-
-</body>
-</html>
+<?php include 'includes/footer.php'; ?>
